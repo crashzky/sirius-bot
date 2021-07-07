@@ -7,13 +7,13 @@ const {
 } = require('telegraf')
 const fetch = require('node-fetch');
 
-const uri = "mongodb+srv://admin:admin@cluster.lirk6.mongodb.net/sirius?retryWrites=true&w=majority";
+const uri = process.env.MONGO_CONNECTION_STRING;
 const client = new MongoClient(uri, {
     useNewUrlParser: true,
     useUnifiedTopology: true
 });
 
-const BOT_TOKEN = '1822618060:AAG1fif7rFJXuEWnerQpZf5pGKyh4QdtR04';
+const BOT_TOKEN = process.env.BOT_TOKEN;
 const bot = new Telegraf(BOT_TOKEN);
 
 client.connect(err => {
@@ -44,15 +44,12 @@ client.connect(err => {
                 });
                 break;
             case 'numbers':
+                if (string <= 0 || string > 100)
+                    return false;
                 string.toLowerCase().split('').forEach(i => {
                     if (!numbers.includes(i))
                         returnResult = false;
                 });
-                break;
-            case 'group':
-                const req = string.toLowerCase().split('');
-                if (!russian.includes(req[0]) || !numbers.includes(req[1]) || (req[2] && !numbers.includes(req[2])))
-                    returnResult = false;
                 break;
         }
         return returnResult;
@@ -60,7 +57,7 @@ client.connect(err => {
 
     //отправить мою анкету с меню
     function sendMenu(ctx, user) {
-        const caption = `${user.name}\n${user.age} лет\nКоманда: ${user.group}\n${user.description ? user.description + '\n' : ''}Твой пол: ${user.gender.toLowerCase()}\nИнтересен: ${user.searchGender.toLowerCase()}`;
+        const caption = `${user.name}\n${user.age} лет\n${user.description ? user.description + '\n' : ''}Твой пол: ${user.gender.toLowerCase()}\nИнтересен: ${user.searchGender.toLowerCase()}`;
 
         fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${user.image_id}`)
             .then(data => data.json())
@@ -78,10 +75,28 @@ client.connect(err => {
                 .resize()));
     }
 
+    //пишем, что твоя анкета понраивлась
+    function sendLike(ctx, user, chat_id) {
+        const caption = `${user.name}\n${user.age} лет${user.description ? '\n' + user.description : ''}`;
+
+        fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${user.image_id}`)
+            .then(data => data.json())
+            .then(json => ctx.telegram.sendPhoto(chat_id, {
+                url: `https://api.telegram.org/file/bot${BOT_TOKEN}/${json.result.file_path}`
+            }, {
+                caption
+            }))
+            .then(() => ctx.telegram.sendMessage(chat_id, 'Твоя анкета кому-то понравилась. Что скажешь?', Markup
+                .keyboard([
+                    ['❤️️', '👎']
+                ])
+                .oneTime()
+                .resize()));
+    }
+
+    //показать анкету
     function sendForm(ctx, results) {
-        collectionUsers.find({
-            searchGender: results[0].gender.toLowerCase()
-        }).toArray((err, searchResults) => {
+        collectionUsers.find().toArray((err, searchResults) => {
             if (searchResults.length === 0) {
                 collectionUsers.updateOne({
                         chat_id: ctx.chat.id
@@ -91,42 +106,66 @@ client.connect(err => {
                         }
                     },
                     () => {
-                        sendMenu(ctx, results[0]);
+                        ctx.reply('По твоему запросу ничего не найдено :(\nПриходи позже, я обязательно кого-нибудь найду!');
                     }
                 );
             } else {
-                searchResults.forEach(i => {
-                    if (!results[0].watchedList.includes(i.chat_id)) {
-                        const caption = `${i.name}\n${i.age} лет\n${i.description ? i.description + '\n' : ''}Твой пол: ${i.gender.toLowerCase()}\nИнтересен: ${i.searchGender.toLowerCase()}`;
+                const filterResults = searchResults.filter(i => i.liked && i.chat_id !== ctx.chat.id)
+                    .filter(i => i.searchGender === results[0].gender.toLowerCase() || i.searchGender.toLowerCase() === 'любой')
+                    .filter(i => i.gender === results[0].searchGender.toLowerCase() || results[0].searchGender.toLowerCase() === 'любой');
 
+                if (filterResults.length !== 0) {
+                    let searchIsComplete = false;
+
+                    let filterResultsWatched = filterResults.filter(i => !results[0].watchedList.includes(i.chat_id));
+                    if (filterResultsWatched.length === 0) {
+                        filterResultsWatched = filterResults;
                         collectionUsers.updateOne({
                                 chat_id: ctx.chat.id
                             }, {
                                 $set: {
-                                    formNow: i.chat_id
+                                    watchedList: []
                                 }
                             },
                             () => {
 
                             }
                         );
-
-                        fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${i.image_id}`)
-                            .then(data => data.json())
-                            .then(json => ctx.replyWithPhoto({
-                                url: `https://api.telegram.org/file/bot${BOT_TOKEN}/${json.result.file_path}`
-                            }, {
-                                caption
-                            }))
-                            .then(() => ctx.reply('Нашёл кое-что. Как тебе?', Markup
-                                .keyboard([
-                                    ['❤️️', '👎', '💤']
-                                ])
-                                .oneTime()
-                                .resize()));
-                        break;
                     }
-                });
+
+                    filterResultsWatched.forEach(i => {
+                        if (!searchIsComplete) {
+                            const caption = `${i.name}\n${i.age} лет${i.description ? '\n' + i.description : ''}`;
+                            searchIsComplete = true;
+                            collectionUsers.updateOne({
+                                    chat_id: ctx.chat.id
+                                }, {
+                                    $set: {
+                                        formNow: i.chat_id
+                                    }
+                                },
+                                () => {
+
+                                }
+                            );
+
+                            fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${i.image_id}`)
+                                .then(data => data.json())
+                                .then(json => ctx.replyWithPhoto({
+                                    url: `https://api.telegram.org/file/bot${BOT_TOKEN}/${json.result.file_path}`
+                                }, {
+                                    caption
+                                }))
+                                .then(() => ctx.reply('Нашёл кое-что. Как тебе?', Markup
+                                    .keyboard([
+                                        ['❤️️', '👎', '💤']
+                                    ])
+                                    .oneTime()
+                                    .resize()));
+                        }
+                    });
+                } else
+                    ctx.reply('По вашему запросу никого не найдено :(\nПриходи позже, я обязательно что-нибудь найду!');
             }
         });
     }
@@ -184,9 +223,11 @@ client.connect(err => {
                         }
                     );
                 } else {
-                    ctx.reply('Используй пожалуйста только цифры');
+                    ctx.reply('Используй пожалуйста только цифры.');
                 }
 
+            } else if (!results[0].image_id) {
+                ctx.reply('Отправь пожалуйста фотографию');
             } else if (results[0].image_id && !results[0].description && results[0].description !== null) {
 
                 let description = null;
@@ -221,9 +262,9 @@ client.connect(err => {
                             }
                         },
                         () => {
-                            ctx.reply('Какой пол интересен?', Markup
+                            ctx.reply('Кто интересен?', Markup
                                 .keyboard([
-                                    ['Мужской', 'Женский']
+                                    ['Мужской', 'Женский', 'Любой']
                                 ])
                                 .oneTime()
                                 .resize());
@@ -235,7 +276,7 @@ client.connect(err => {
 
             } else if (!results[0].searchGender) {
 
-                if (ctx.message.text === 'Мужской' || ctx.message.text === 'Женский') {
+                if (ctx.message.text === 'Мужской' || ctx.message.text === 'Женский' || ctx.message.text === 'Любой') {
                     collectionUsers.updateOne({
                             chat_id: ctx.chat.id
                         }, {
@@ -267,7 +308,7 @@ client.connect(err => {
                         }
                     );
                 } else {
-                    ctx.reply('Напиши пожалуйста корректный пол: Мужской/Женский');
+                    ctx.reply('Напиши пожалуйста корректный пол: Мужской/Женский/Любой');
                 }
 
             } else if (!results[0].watchedList) {
@@ -276,7 +317,8 @@ client.connect(err => {
                             chat_id: ctx.chat.id
                         }, {
                             $set: {
-                                watchedList: []
+                                watchedList: [],
+                                liked: []
                             }
                         },
                         () => {
@@ -297,7 +339,7 @@ client.connect(err => {
                     });
                 }
             } else {
-                if (ctx.message.text === 'Перезаписать мою анкету') {
+                if (ctx.message.text.toLowerCase() === 'перезаписать мою анкету') {
                     collectionUsers.deleteOne({
                         chat_id: ctx.chat.id
                     }, () => {
@@ -309,38 +351,134 @@ client.connect(err => {
                             ctx.reply('Начнём. Как тебя зовут?');
                         });
                     });
-                } else if (ctx.message.text === 'Смотреть анкеты') {
+                } else if (ctx.message.text.toLowerCase() === 'смотреть анкеты') {
                     sendForm(ctx, results);
-                } else if (ctx.message.text === '❤️') {
+                } else if (ctx.message.text === '❤️️') {
                     collectionUsers.find({
                         chat_id: ctx.chat.id
                     }).toArray((err, results) => {
-                        if (!results[0].formNow)
+                        //проверяем, лайкнул ли нас кто-то
+                        if (results[0].liked.length !== 0) {
+                            const liker = results[0].liked[0];
+                            let newLiked = results[0].liked;
+                            newLiked.splice(0, 1);
+
+                            collectionUsers.updateOne({
+                                    chat_id: results[0].chat_id
+                                }, {
+                                    $set: {
+                                        liked: newLiked
+                                    }
+                                },
+                                () => {
+                                    collectionUsers.find({
+                                        chat_id: results[0].chat_id
+                                    }).toArray((err, updateResults) => {
+                                        ctx.telegram.getChat(liker)
+                                            .then(data => ctx.reply(`Отлично! Хорошей беседы :)\nАккаунт собеседника: @${data.username}`));
+
+                                        ctx.telegram.sendMessage(liker, `Хэй! Твой собеседник не прочь познакомиться! :)\nАккаунт собеседника: @${ctx.chat.username}`);
+                                        if (newLiked.length !== 0) {
+                                            collectionUsers.find({
+                                                chat_id: newLiked[0]
+                                            }).toArray((err, users) => {
+                                                sendLike(ctx, users[0], ctx.chat.id);
+                                            });
+                                        } else {
+                                            sendMenu(ctx, updateResults[0]);
+                                        }
+                                    });
+                                }
+                            );
+                        } else if (!results[0].formNow)
                             ctx.reply('Похоже вы не начинали просмотр анкет...');
                         else {
-                            
+                            collectionUsers.find({
+                                chat_id: results[0].formNow
+                            }).toArray((err, likedResult) => {
+                                let newLiked = likedResult[0].liked;
+                                newLiked.push(ctx.chat.id);
+
+                                collectionUsers.updateOne({
+                                        chat_id: results[0].formNow
+                                    }, {
+                                        $set: {
+                                            liked: newLiked
+                                        }
+                                    },
+                                    (err, updateLiked) => {
+                                        let newWathcedList = results[0].watchedList;
+                                        newWathcedList.push(results[0].formNow);
+
+                                        collectionUsers.updateOne({
+                                                chat_id: results[0].chat_id
+                                            }, {
+                                                $set: {
+                                                    watchedList: newWathcedList
+                                                }
+                                            },
+                                            () => {
+                                                collectionUsers.find({
+                                                    chat_id: results[0].chat_id
+                                                }).toArray((err, updateResults) => {
+                                                    sendLike(ctx, updateResults[0], results[0].formNow);
+                                                    sendForm(ctx, updateResults);
+                                                });
+                                            }
+                                        );
+                                    }
+                                );
+                            });
                         }
                     });
                 } else if (ctx.message.text === '👎') {
                     collectionUsers.find({
                         chat_id: ctx.chat.id
                     }).toArray((err, results) => {
-                        if (!results[0].formNow)
-                            ctx.reply('Похоже вы не начинали просмотр анкет...');
-                        else {
-                            const newWathcedList = watchedList.push(results[0].formNow);
+                        if (results[0].liked.length !== 0) {
+                            let newLiked = results[0].liked;
+                            newLiked.splice(0, 1);
 
                             collectionUsers.updateOne({
-                                chat_id: ctx.chat.id
-                            }, {
-                                $set: {
-                                    watchedList: newWathcedList
+                                    chat_id: results[0].chat_id
+                                }, {
+                                    $set: {
+                                        liked: newLiked
+                                    }
+                                },
+                                () => {
+                                    collectionUsers.find({
+                                        chat_id: results[0].chat_id
+                                    }).toArray((err, updateResults) => {
+                                        if (newLiked.length !== 0) {
+                                            collectionUsers.find({
+                                                chat_id: newLiked[0]
+                                            }).toArray((err, users) => {
+                                                sendLike(ctx, users[0], ctx.chat.id);
+                                            });
+                                        } else {
+                                            sendMenu(ctx, updateResults[0]);
+                                        }
+                                    });
                                 }
-                            },
-                            () => {
-                                sendForm(ctx, results);
-                            }
-                        );
+                            );
+                        } else if (!results[0].formNow)
+                            ctx.reply('Похоже вы не начинали просмотр анкет...');
+                        else {
+                            let newWathcedList = results[0].watchedList;
+                            newWathcedList.push(results[0].formNow);
+
+                            collectionUsers.updateOne({
+                                    chat_id: ctx.chat.id
+                                }, {
+                                    $set: {
+                                        watchedList: newWathcedList
+                                    }
+                                },
+                                () => {
+                                    sendForm(ctx, results);
+                                }
+                            );
                         }
                     });
                 } else if (ctx.message.text === '💤') {
@@ -351,16 +489,14 @@ client.connect(err => {
                             ctx.reply('Похоже вы не начинали просмотр анкет...');
                         else {
                             collectionUsers.updateOne({
-                                chat_id: ctx.chat.id
-                            }, {
-                                $set: {
-                                    formNow: null
-                                }
-                            },
-                            () => {
-                                sendMenu(ctx, results[0]);
-                            }
-                        );
+                                    chat_id: ctx.chat.id
+                                }, {
+                                    $set: {
+                                        formNow: null
+                                    }
+                                },
+                                () => {}
+                            );
                             sendMenu(ctx, results[0]);
                         }
                     });
@@ -395,10 +531,43 @@ client.connect(err => {
                     }
                 );
             } else {
-                ctx.reply('Кажется ты слишком рано отправил фото. Выполни сначала предыдущий шаг');
+                ctx.reply('Фото классное, но оно мне сейчас не нужно');
             }
         });
     });
 
+    //защита от дебилов
+    bot.on('video', (ctx) => {
+        ctx.reply('Крутое видео 🗿');
+    });
+
+    bot.on('sticker', (ctx) => {
+        ctx.reply('Крутой стикер 🗿');
+    });
+
+    bot.on('audio', (ctx) => {
+        ctx.reply('Круто 🗿');
+    });
+
+    bot.on('location', (ctx) => {
+        ctx.reply('Круто 🗿');
+    });
+
+    bot.on('document', (ctx) => {
+        ctx.reply('Круто 🗿');
+    });
+
+    bot.on('poll', (ctx) => {
+        ctx.reply('За 1 🗿');
+    });
+
+    bot.on('contact', (ctx) => {
+        ctx.reply('Завтра позвоню 🗿');
+    });
+
     bot.launch();
 });
+
+// Enable graceful stop
+process.once('SIGINT', () => bot.stop('SIGINT'))
+process.once('SIGTERM', () => bot.stop('SIGTERM'))
