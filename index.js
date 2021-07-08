@@ -16,6 +16,8 @@ const client = new MongoClient(uri, {
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const bot = new Telegraf(BOT_TOKEN);
 
+console.log(process.env.NAME);
+
 client.connect(err => {
     const collectionUsers = client.db('sirius').collection('users');
 
@@ -565,5 +567,14 @@ client.connect(err => {
         ctx.reply('Завтра позвоню 🗿');
     });
 
-    bot.launch();
+    bot.launch({
+        webhook: {
+          domain: 'https://sirius-tinder.herokuapp.com/',
+          port: process.env.PORT
+        }
+      })
 });
+
+      // Enable graceful stop
+      process.once('SIGINT', () => bot.stop('SIGINT'))
+      process.once('SIGTERM', () => bot.stop('SIGTERM'))
