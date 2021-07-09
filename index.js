@@ -435,7 +435,8 @@ client.connect(err => {
                                                 collectionUsers.find({
                                                     chat_id: results[0].chat_id
                                                 }).toArray((err, updateResults) => {
-                                                    sendLike(ctx, updateResults[0], results[0].formNow);
+                                                    if(newLiked.length === 1)
+                                                        sendLike(ctx, updateResults[0], results[0].formNow);
                                                     sendForm(ctx, updateResults);
                                                 });
                                             }
