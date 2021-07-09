@@ -114,7 +114,8 @@ client.connect(err => {
             } else {
                 const filterResults = searchResults.filter(i => i.liked && i.chat_id !== ctx.chat.id)
                     .filter(i => i.searchGender === results[0].gender.toLowerCase() || i.searchGender.toLowerCase() === 'любой')
-                    .filter(i => i.gender === results[0].searchGender.toLowerCase() || results[0].searchGender.toLowerCase() === 'любой');
+                    .filter(i => i.gender === results[0].searchGender.toLowerCase() || results[0].searchGender.toLowerCase() === 'любой')
+                    .filter(i => !results[0].likedList.includes(i.chat_id));
 
                 if (filterResults.length !== 0) {
                     let searchIsComplete = false;
@@ -130,7 +131,7 @@ client.connect(err => {
                                 }
                             },
                             () => {
-
+                                ctx.reply('Анкеты закончились! Я ещё раз покажу людей, которым ты поставил 👎')
                             }
                         );
                     }
@@ -326,7 +327,8 @@ client.connect(err => {
                         }, {
                             $set: {
                                 watchedList: [],
-                                liked: []
+                                liked: [],
+                                likedList: []
                             }
                         },
                         () => {
@@ -418,11 +420,15 @@ client.connect(err => {
                                         let newWathcedList = results[0].watchedList;
                                         newWathcedList.push(results[0].formNow);
 
+                                        let newLikedList = results[0].likedList;
+                                        newLikedList.push(results[0].formNow);
+
                                         collectionUsers.updateOne({
                                                 chat_id: results[0].chat_id
                                             }, {
                                                 $set: {
-                                                    watchedList: newWathcedList
+                                                    watchedList: newWathcedList,
+                                                    likedList: newLikedList
                                                 }
                                             },
                                             () => {
