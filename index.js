@@ -179,7 +179,13 @@ client.connect(err => {
         }).toArray((err, results) => {
 
             if (results.length !== 0) {
-                ctx.reply('Хмм. Кажется, я тебя помню');
+                ctx.reply('Что будем делать?\nСписок команд:\n1. Смотреть анкеты\n2. Перезаписать мою анкету', Markup
+                .keyboard([
+                    ['Смотреть анкеты'],
+                    ['Перезаписать мою анкету']
+                ])
+                .oneTime()
+                .resize());
             } else {
                 insertUser(ctx);
             }
