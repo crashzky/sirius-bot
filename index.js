@@ -523,18 +523,16 @@ client.connect(err => {
     });
 
     bot.on('photo', (ctx) => {
-        console.log("LOG: get photo");
         collectionUsers.find({
             chat_id: ctx.chat.id
         }).toArray((err, results) => {
-            console.log("LOG: connect bd");
             if (results.length === 0) {
                 insertUser(ctx);
             } else if (results[0].age && !results[0].image_id) {
-                let photo = ctx.message.photo[0] ? ctx.message.photo[0].file_id : null;
-                photo = ctx.message.photo[1] ? ctx.message.photo[1].file_id : photo;
-                photo = ctx.message.photo[2] ? ctx.message.photo[2].file_id : photo;
-                photo = ctx.message.photo[3] ? ctx.message.photo[3].file_id : photo;
+                let photo = null;
+
+                for(let j = 0; j < 4; j++)
+                   photo = ctx.message.photo[j] ? ctx.message.photo[j].file_id : photo;
 
                 if(photo) {
                 collectionUsers.updateOne({
