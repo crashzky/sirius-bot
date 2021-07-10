@@ -523,9 +523,11 @@ client.connect(err => {
     });
 
     bot.on('photo', (ctx) => {
+        console.log("LOG: get photo");
         collectionUsers.find({
             chat_id: ctx.chat.id
         }).toArray((err, results) => {
+            console.log("LOG: connect bd");
             if (results.length === 0) {
                 insertUser(ctx);
             } else if (results[0].age && !results[0].image_id) {
