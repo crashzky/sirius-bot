@@ -68,7 +68,7 @@ client.connect(err => {
             }, {
                 caption
             }))
-            .then(() => ctx.reply('Что буем делать?', Markup
+            .then(() => ctx.reply('Что будем делать?', Markup
                 .keyboard([
                     ['Смотреть анкеты'],
                     ['Перезаписать мою анкету']
