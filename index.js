@@ -531,11 +531,17 @@ client.connect(err => {
             if (results.length === 0) {
                 insertUser(ctx);
             } else if (results[0].age && !results[0].image_id) {
+                let photo = ctx.message.photo[0] ? ctx.message.photo[0].file_id : null;
+                photo = ctx.message.photo[1] ? ctx.message.photo[1].file_id : photo;
+                photo = ctx.message.photo[2] ? ctx.message.photo[2].file_id : photo;
+                photo = ctx.message.photo[3] ? ctx.message.photo[3].file_id : photo;
+
+                if(photo) {
                 collectionUsers.updateOne({
                         chat_id: ctx.chat.id
                     }, {
                         $set: {
-                            image_id: ctx.message.photo[3].file_id
+                            image_id: photo
                         }
                     },
                     () => {
@@ -547,6 +553,8 @@ client.connect(err => {
                             .resize());
                     }
                 );
+              } else
+                 ctx.reply("Извините, что-то полшло не так, попробуйте ещё раз!");
             } else {
                 ctx.reply('Фото классное, но оно мне сейчас не нужно');
             }
