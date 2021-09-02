@@ -16,8 +16,6 @@ const client = new MongoClient(uri, {
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const bot = new Telegraf(BOT_TOKEN);
 
-console.log(process.env.NAME);
-
 client.connect(err => {
     const collectionUsers = client.db('sirius').collection('users');
 
