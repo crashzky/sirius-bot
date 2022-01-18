@@ -199,7 +199,7 @@ client.connect(err => {
                 insertUser(ctx);
             } else if (!results[0].name) {
 
-                if (ctx.message.text && ctx.message.text.length > 0 && checkSymbols(ctx.message.text, 'russian')) {
+                if (ctx.message.text && ctx.message.text.length > 0) {
                     collectionUsers.updateOne({
                             chat_id: ctx.chat.id
                         }, {
