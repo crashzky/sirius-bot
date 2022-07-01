@@ -32,7 +32,7 @@ client.connect(err => {
 
     //проверка на символы
     function checkSymbols(string, type) {
-        const russian = 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя';
+        const russian = 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя ';
         const numbers = '0123456789';
 
         let returnResult = true;
